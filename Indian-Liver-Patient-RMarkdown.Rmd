@@ -1,0 +1,283 @@
+---
+title: "Indian Liver Patients Prediction"
+author: "Ankur"
+date: "6/25/2021"
+output:
+  word_document: default
+  pdf_document: default
+---
+As advised, visited Kaggle and downloaded dataset on Indian Liver Patients
+https://www.kaggle.com/uciml/indian-liver-patient-records
+
+## Executive Summary: ##
+
+**Why** ?
+
+Liver is an important organ in the body. With the algorithm built we will try to assess whether person is liver patient or not. This will help humanity to proactively work on diseases before it goes worse.
+
+**What** ?
+
+We have data of 583 patients. Each patient is tested for some bio paremeters and last row tells whether person is liver patient or not.
+We will build algorithms on this data and check for most accurate method.
+We will build Logistics Regression and KNN Models and see which one is more accurate.
+Data will be spitted in Training & Testing in a ratio of 80% & 20% 
+
+**About Data**:
+
+**Context**:
+Patients with Liver disease have been continuously increasing because of excessive consumption of alcohol, inhale of harmful gases, intake of contaminated food, pickles and drugs. This dataset was used to evaluate prediction algorithms in an effort to reduce burden on doctors.
+
+**Content**:
+This data set contains 416 liver patient records and 167 non liver patient records collected from North East of Andhra Pradesh, India. The "Dataset" column is a class label used to divide groups into liver patient (liver disease) or not (no disease). This data set contains 441 male patient records and 142 female patient records.
+
+Any patient whose age exceeded 89 is listed as being of age "90".
+
+**Columns**:
+
+Age of the patient
+Gender of the patient
+Total Bilirubin
+Direct Bilirubin
+Alkaline Phosphotase
+Alamine Aminotransferase
+Aspartate Aminotransferase
+Total Protiens
+Albumin
+Albumin and Globulin Ratio
+Dataset: field used to split the data into two sets (patient with liver disease, or no disease)
+
+Lets Import the file
+before that lets get the required packages
+```{r}
+# Loading the required packages
+library(dummies)
+library(boot) # For K fold
+library(caret)
+library(ggplot2)
+library(class) # For Knn
+```
+
+Importing File
+
+```{r}
+f<- file.choose()
+data <- read.csv(f)
+
+```
+
+## Data Visualisation ##
+
+```{r}
+summary(data)
+head(data)
+```
+
+We can see age varies from 4 uptil 90
+in Dataset column, 1 is Liver patient and 2 is not a liver patient.
+
+Check for any missing values in the dataset
+```{r}
+sum(is.na(data))
+```
+There are 4 Missing Values in the data. Lets see in which column?
+```{r}
+apply(data,2,function(x)sum(is.na(x)))
+```
+THere are 4 Missing columns in Column Named Albumin & Glucose Ration
+
+Age Histogram
+```{r}
+hist(data$Age)
+```
+
+
+No of Males & Females in dataset
+```{r}
+table(data$Gender)
+
+```
+There are 441 Male & 142 Female
+
+No of Patients in Data Set
+```{r}
+table(data$Dataset)
+```
+416 are having liver disease
+
+Lets Tabulate
+```{r}
+table(data$Gender,data$Dataset)
+```
+324 males & 92 Females are patient
+
+Plotting the Table
+
+```{r}
+plot(table(data$Gender,data$Dataset), 
+     ylab = "Is Patient?", 
+     xlab = "Gender", 
+     main = "Gender wise Patient Analysis",
+     col = c("lightgreen"))
+```
+Is there is connect between Age & Total Bilirubin
+```{r}
+p<- ggplot(data= data)
+p<- p+ geom_point(aes(Age,Total_Bilirubin))
+p
+
+```
+Relationship between Total Bilirubin & Direct Bilirubin
+
+```{r}
+p1<- ggplot(data= data)
+p1<- p1+ geom_point(aes(Total_Bilirubin, Direct_Bilirubin))
+p1
+
+```
+Total Bilirubin & Direct Bilirubin are proportional
+
+
+Relationship between Total Bilirubin & Direct Bilirubin
+
+```{r}
+p2<- ggplot(data= data)
+p2<- p2+ geom_point(aes(Total_Bilirubin, Total_Protiens))
+p2
+
+```
+**Data Wrangling**
+
+
+Lets encode Dataset as 0 and 1.
+
+```{r}
+data$Dataset = ifelse(data$Dataset == 2, 0 ,1)
+str(data)
+```
+
+
+Now we will factorize Dataset  variable in the data
+```{r}
+data$Dataset = as.factor(data$Dataset)
+contrasts(data$Dataset)
+str(data)
+```
+Removing NAs from data
+
+```{r}
+data_clean = data[complete.cases(data),]
+```
+
+## Partition of Data
+Now we will split the data into Train & test Set
+
+```{r}
+index <-  createDataPartition(data_clean$Dataset,p= .8, times=1, list=F)
+
+train <-  data_clean[index,]
+test <- data_clean[-index,]
+```
+
+## Modeling 
+
+**Fitting a logistic regression model**:
+
+We will use logistic regression model on the training set which is 80% of the total data.
+
+```{r}
+logistic<- glm(Dataset~., data=train, family='binomial')
+
+summary(logistic)
+```
+Pedicting on the Dataset
+
+```{r}
+pred= predict(logistic, test, type='response')
+pred
+
+
+pred = ifelse(pred > 0.40, 1, 0)
+pred= as.factor(pred)
+```
+
+
+Checking Accuracy with Confusion Matrix
+
+```{r}
+matrix = confusionMatrix(pred,test$Dataset)
+matrix
+```
+Accuracy is 73.04%
+
+**K Nearest Neighbour**
+
+We will create new variable for interpretability
+
+```{r}
+train_knn = train
+
+test_knn= test
+```
+
+Let us create some dummy variable for Gender in both train and test
+
+Train data set
+```{r}
+gender = dummy(train_knn$Gender)
+
+
+train_knn$Gender = gender[,2]
+str(train_knn)
+```
+Test Data Set
+
+```{r}
+gender=dummy(test_knn$Gender)
+test_knn$Gender = gender[,2]
+str(test_knn)
+```
+Let us do scaling for Knn
+
+```{r}
+train_scale = scale(train_knn[,-11])
+test_scale = scale(test_knn[,-11])
+```
+
+
+We are not sure how many neighbors to use so we will  run a loop and record the metrics for each number of neighbors
+
+```{r}
+
+Results_knn = matrix(0,nrow = 13, ncol = 4)
+colnames(Results_knn) = c('Neighbors','01error','10error','Accuracy')
+
+for(i in 1:13){
+  pred_knn = knn(train = train_scale,
+                 test = test_scale,
+                 cl = train_knn[,11],
+                 k = i + 2,
+                 prob = TRUE)
+  
+  knn_con = confusionMatrix(data = pred_knn, reference = test_knn[,11])
+  Results_knn[i,1] = i + 2
+  Results_knn[i,2] = knn_con$table[2,1]
+  Results_knn[i,3] = knn_con$table[1,2]
+  Results_knn[i,4] = knn_con$overall[1]
+}
+
+Results_knn = as.data.frame(Results_knn)
+Results_knn
+```
+
+Accuracy = 68.69%
+
+##Conclusion:
+As advised, we have built two models.
+
+ We have ran two models as follows . 
+ Logistics Regression: 73.04%
+ Knn: 68.69%
+ 
+ 
+ 
+
